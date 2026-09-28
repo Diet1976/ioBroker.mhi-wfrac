@@ -46,6 +46,8 @@ class MHIWFRac extends utils.Adapter {
         this.on("stateChange", this.onStateChange.bind(this));
         this.on("unload", this.onUnload.bind(this));
         this.devices = {};
+        // devices that could not be registered yet (e.g. unreachable at adapter start) - retried on every update
+        this.pendingDevices = [];
     }
 
     /**
@@ -71,7 +73,9 @@ class MHIWFRac extends utils.Adapter {
         for (const device of this.config.devices) {
             if (device["enabled"]) {
                 this.log.debug(`onReady::register(${device["ip"]}/${device["name"]})`);
-                await this.register(device["ip"], device["name"]);
+                if (!(await this.register(device["ip"], device["name"]))) {
+                    this.pendingDevices.push({ ip: device["ip"], name: device["name"] });
+                }
             }
         }
 
@@ -556,6 +560,15 @@ class MHIWFRac extends utils.Adapter {
     }
 
     async update() {
+        // retry registering devices that were not reachable so far - otherwise they stay missing until a restart
+        for (const pending of [...this.pendingDevices]) {
+            const device = await this.register(pending.ip, pending.name, true);
+            if (device) {
+                this.log.info(`${pending.name}: registered after a previous failure`);
+                this.pendingDevices = this.pendingDevices.filter(p => p !== pending);
+                await this.initIOBStates(device);
+            }
+        }
         for (const device of Object.values(this.devices)) {
             await this.getDataFromDevice(device);
             await this.setIOBStates(device);
@@ -703,10 +716,18 @@ class MHIWFRac extends utils.Adapter {
         );
     }
 
-    async register(address, name) {
+    /**
+     * Registers a device; returns the registered device or null if it could not be reached
+     *
+     * @param {string} address IP address or host name
+     * @param {string} name name from the configuration
+     * @param {boolean} [retry] retry of a device that failed before - log failures at debug level only
+     */
+    async register(address, name, retry = false) {
         const device = new Device(this.log);
         device.name = name;
         device.airconAddress = address;
+        const fail = msg => (retry ? this.log.debug(`${name}: ${msg}`) : this.errorHandler(device, msg));
 
         try {
             Object.assign(device, await this.detectDeviceConnection(address));
@@ -723,13 +744,14 @@ class MHIWFRac extends utils.Adapter {
 
                         await this.update_account_info(device);
                     } else {
-                        this.errorHandler(device, `Failed to register device! | ${JSON.stringify(ret)}`);
+                        fail(`Failed to register device! | ${JSON.stringify(ret)}`);
                     }
                 })
-                .catch(error => this.errorHandler(device, `Failed to register device! | ${error}`));
+                .catch(error => fail(`Failed to register device! | ${error}`));
         } catch (error) {
-            this.errorHandler(device, `Failed to detect local API mode during registration! | ${error}`);
+            fail(`Failed to detect local API mode during registration! | ${error}`);
         }
+        return device.airconId && this.devices[device.airconId] === device ? device : null;
     }
 
     errorHandler(device, error) {

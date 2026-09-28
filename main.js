@@ -645,9 +645,9 @@ class MHIWFRac extends utils.Adapter {
             .post(url, data, {
                 timeout: 5000, // Set a timeout of 5 seconds
                 httpsAgent: connection.useHttps ? HTTPS_AGENT : undefined,
-                "axios-retry": {
-                    retries: options.disableRetry ? 0 : undefined,
-                },
+                // Only override the retry option when retries are disabled: axios-retry merges this object over the
+                // global config, so `retries: undefined` would replace the configured 4 retries and disable them all.
+                ...(options.disableRetry ? { "axios-retry": { retries: 0 } } : {}),
                 headers: {
                     Connection: "close",
                     "Content-Type": "application/json;charset=UTF-8",

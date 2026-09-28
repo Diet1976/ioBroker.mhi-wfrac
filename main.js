@@ -709,6 +709,19 @@ class MHIWFRac extends utils.Adapter {
         throw new Error(`Unable to detect local API mode for device ${address}`);
     }
 
+    /**
+     * Runs requests to one device one after another: the WF-RAC module handles only one connection at a time,
+     * so a command sent while a poll is running would otherwise time out or be refused (ECONNREFUSED).
+     *
+     * @param {object} device device the request goes to
+     * @param {() => Promise<any>} fn the request
+     */
+    serialize(device, fn) {
+        const run = device.queue.then(fn, fn);
+        device.queue = run.catch(() => {});
+        return run;
+    }
+
     async update_account_info(device) {
         //Update the account info on the airco (sets to operator id of the device)
         const contents = {
@@ -717,7 +730,7 @@ class MHIWFRac extends utils.Adapter {
             remote: 0,
             timezone: TIMEZONE,
         };
-        await this._postConnection(device, COMMAND_UPDATE_ACCOUNT_INFO, contents).catch(error =>
+        await this.serialize(device, () => this._postConnection(device, COMMAND_UPDATE_ACCOUNT_INFO, contents)).catch(error =>
             this.errorHandler(device, `Failed to update account info on device! | ${error}`),
         );
     }
@@ -787,7 +800,7 @@ class MHIWFRac extends utils.Adapter {
         const contents = {
             [KEY_AIRCON_ID]: device.airconId,
         };
-        await this._postConnection(device, COMMAND_GET_AIRCON_STAT, contents)
+        await this.serialize(device, () => this._postConnection(device, COMMAND_GET_AIRCON_STAT, contents))
             .then(ret => {
                 if (ret.error === "") {
                     device.acCoder.fromBase64(device.airconStat, ret.response.contents.airconStat);
@@ -810,7 +823,7 @@ class MHIWFRac extends utils.Adapter {
             [KEY_AIRCON_STAT]: device.acCoder.toBase64(device.airconStat),
         };
 
-        await this._postConnection(device, COMMAND_SET_AIRCON_STAT, contents)
+        await this.serialize(device, () => this._postConnection(device, COMMAND_SET_AIRCON_STAT, contents))
             .then(ret => {
                 if (ret.error === "") {
                     device.acCoder.fromBase64(device.airconStat, ret.response.contents.airconStat);

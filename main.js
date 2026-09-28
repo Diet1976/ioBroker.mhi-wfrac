@@ -180,7 +180,8 @@ class MHIWFRac extends utils.Adapter {
             await this.setState(`${airconChannel}.autoHeating`, device.autoHeating, true);
             await this.setState(`${airconChannel}.online`, device.online, true);
         } catch (e) {
-            this.errorHandler(device, `Error setting ioBroker state! | ${JSON.stringify(device.airconStat)}`);
+            // a problem writing ioBroker states says nothing about the device connection - don't set it offline
+            this.log.warn(`${device.name}: Error setting ioBroker state! | ${e} | ${JSON.stringify(device.airconStat)}`);
         }
     }
 

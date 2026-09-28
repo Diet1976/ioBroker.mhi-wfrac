@@ -181,7 +181,9 @@ class MHIWFRac extends utils.Adapter {
             await this.setState(`${airconChannel}.online`, device.online, true);
         } catch (e) {
             // a problem writing ioBroker states says nothing about the device connection - don't set it offline
-            this.log.warn(`${device.name}: Error setting ioBroker state! | ${e} | ${JSON.stringify(device.airconStat)}`);
+            this.log.warn(
+                `${device.name}: Error setting ioBroker state! | ${e} | ${JSON.stringify(device.airconStat)}`,
+            );
         }
     }
 
@@ -730,8 +732,8 @@ class MHIWFRac extends utils.Adapter {
             remote: 0,
             timezone: TIMEZONE,
         };
-        await this.serialize(device, () => this._postConnection(device, COMMAND_UPDATE_ACCOUNT_INFO, contents)).catch(error =>
-            this.errorHandler(device, `Failed to update account info on device! | ${error}`),
+        await this.serialize(device, () => this._postConnection(device, COMMAND_UPDATE_ACCOUNT_INFO, contents)).catch(
+            error => this.errorHandler(device, `Failed to update account info on device! | ${error}`),
         );
     }
 

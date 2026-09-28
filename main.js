@@ -103,6 +103,11 @@ class MHIWFRac extends utils.Adapter {
         const airconId = await this.getObjectAsync(id).then(obj => obj?.native.airconId);
         const val = state.val;
         const device = this.devices[airconId];
+        if (!device) {
+            // e.g. device not registered (unreachable since adapter start) - would throw on device.airconStat
+            this.log.warn(`Cannot set ${id}: device ${airconId} is not connected`);
+            return;
+        }
         let valchange = 0;
         let idS = "";
         const h = id.split(".");
@@ -611,7 +616,7 @@ class MHIWFRac extends utils.Adapter {
             // The state was changed
             if (state.ack === false) {
                 this.log.debug(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
-                this.setStateVal(id, state);
+                this.setStateVal(id, state).catch(e => this.log.error(`Could not set ${id}: ${e}`));
             }
         } else {
             // The state was deleted

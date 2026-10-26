@@ -781,6 +781,24 @@ class MHIWFRac extends utils.Adapter {
         this.updateConnectionInfo();
     }
 
+    /**
+     * Polling errors: log only the start of an outage, further failed polls go to debug
+     * (an unreachable module would otherwise log an error every interval).
+     *
+     * @param {object} device - device that failed
+     * @param {string} error - error message
+     */
+    pollErrorHandler(device, error) {
+        if (device.offlineSince) {
+            this.log.debug(`${device.name}: ${error}`);
+            this.setOnlineState(device, false);
+            this.updateConnectionInfo();
+            return;
+        }
+        device.offlineSince = Date.now();
+        this.errorHandler(device, `${error} - further failures are logged at debug level until the device answers again`);
+    }
+
     setOnlineState(device, online) {
         if (device) {
             const airconChannel = this.name2id(device.airconId);
@@ -814,9 +832,14 @@ class MHIWFRac extends utils.Adapter {
                     device.ledStat = ret.response.contents.ledStat;
                     device.autoHeating = ret.response.contents.autoHeating;
                     device.online = true;
+                    if (device.offlineSince) {
+                        const minutes = Math.round((Date.now() - device.offlineSince) / 60000);
+                        this.log.info(`${device.name}: reachable again after ${minutes} min`);
+                        delete device.offlineSince;
+                    }
                 }
             })
-            .catch(error => this.errorHandler(device, `Could not get Data: ${error}`));
+            .catch(error => this.pollErrorHandler(device, `Could not get Data: ${error}`));
     }
 
     async sendDataToDevice(device) {
